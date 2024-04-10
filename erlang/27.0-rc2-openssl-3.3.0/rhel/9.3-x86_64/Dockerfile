@@ -39,6 +39,20 @@ RUN git clone -b OTP-${OTP_VERSION} https://github.com/erlang/otp /usr/local/src
                  --with-ssl=/opt/openssl-${OPENSSL_VERSION} \
                  --without-javac \
                  --without-odbc \
+                 --without-wx \
+                 --without-debugger \
+                 --without-observer \
+                 --without-crashdump_viewer \
+                 --without-et \
+                 --without-tftp \
+                 --without-ftp \
+                 --without-megaco \
+                 --without-eldap \
+                 --without-diameter \
+                 --without-jinterface \
+                 --without-mnesia \
+                 --without-snmp \
+                 --without-erl_docgen \
   && make -j \
   && make install \
   && cd .. \
