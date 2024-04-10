@@ -27,7 +27,11 @@ RUN curl -sSL "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz"
   && cd .. \
   && rm -rf openssl-${OPENSSL_VERSION}
 
-RUN git clone -b OTP-${OTP_VERSION} https://github.com/erlang/otp /usr/local/src/otp_src_${OTP_VERSION} \
+# git config を入れないとタイムアウトしてしまう
+RUN git config --global http.postBuffer 524288000 \
+  && git config --global http.lowSpeedLimit 0 \
+  && git config --global http.lowSpeedTime 999999 \
+  && git clone -b OTP-${OTP_VERSION} https://github.com/erlang/otp /usr/local/src/otp_src_${OTP_VERSION} \
   && cd /usr/local/src/otp_src_${OTP_VERSION} \
   && ./configure --prefix=/opt/erlang-${OTP_VERSION} \
                  --enable-kernel-poll \
