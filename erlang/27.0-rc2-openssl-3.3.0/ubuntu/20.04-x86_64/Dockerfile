@@ -50,6 +50,9 @@ RUN git clone -b OTP-${OTP_VERSION} https://github.com/erlang/otp /usr/local/src
                  --without-mnesia \
                  --without-snmp \
                  --without-erl_docgen \
+                 --without-edoc \
+                 --without-xmerl \
+                 --without-ssh \
   && make -j \
   && make install \
   && cd .. \
