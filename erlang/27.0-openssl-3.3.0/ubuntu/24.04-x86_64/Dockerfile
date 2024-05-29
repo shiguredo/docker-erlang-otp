@@ -7,11 +7,16 @@ ENV OTP_VERSION 27.0
 
 RUN apt-get update \
   && apt-get install -y \
+         --no-install-recommends \
          autoconf \
          git \
          build-essential \
          curl \
          ncurses-dev \
+         libncurses5-dev \
+         libva-dev \
+         libdrm-dev \
+         ffmpeg \
   && apt-get clean \
   && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
 
