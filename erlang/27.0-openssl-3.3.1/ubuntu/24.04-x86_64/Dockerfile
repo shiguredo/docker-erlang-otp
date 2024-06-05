@@ -12,6 +12,7 @@ RUN apt-get update \
          git \
          build-essential \
          curl \
+         ca-certificates \
          ncurses-dev \
          libncurses5-dev \
          libva-dev \
