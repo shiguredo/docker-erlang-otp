@@ -1,7 +1,5 @@
 FROM ubuntu:22.04
 
-LABEL maintainer="v@shiguredo.jp"
-
 ENV OPENSSL_VERSION 3.3.1
 ENV OTP_VERSION 27.0.1
 
