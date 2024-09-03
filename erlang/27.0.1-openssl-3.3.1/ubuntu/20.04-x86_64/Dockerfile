@@ -1,9 +1,7 @@
 FROM ubuntu:20.04
 
-LABEL maintainer="v@shiguredo.jp"
-
-ENV OPENSSL_VERSION 3.3.1
-ENV OTP_VERSION 27.0.1
+ENV OPENSSL_VERSION=3.3.1
+ENV OTP_VERSION=27.0.1
 
 RUN apt-get update \
   && apt-get install -y \
@@ -58,6 +56,6 @@ RUN git clone -b OTP-${OTP_VERSION} https://github.com/erlang/otp /usr/local/src
   && cd .. \
   && rm -rf otp_src_${OTP_VERSION}
 
-ENV PATH /opt/erlang-${OTP_VERSION}/bin:$PATH
+ENV PATH=/opt/erlang-${OTP_VERSION}/bin:$PATH
 
 WORKDIR /

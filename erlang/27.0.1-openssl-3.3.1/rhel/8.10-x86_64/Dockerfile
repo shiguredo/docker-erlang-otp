@@ -2,8 +2,8 @@ FROM redhat/ubi8:8.10
 
 LABEL maintainer="v@shiguredo.jp"
 
-ENV OTP_VERSION 27.0.1
-ENV OPENSSL_VERSION 3.3.1
+ENV OTP_VERSION=27.0.1
+ENV OPENSSL_VERSION=3.3.1
 
 RUN dnf -y update \
   && dnf clean all \
@@ -61,6 +61,6 @@ RUN git config --global http.postBuffer 524288000 \
   && cd .. \
   && rm -rf otp_src_${OTP_VERSION}
 
-ENV PATH /opt/erlang-${OTP_VERSION}/bin:$PATH
+ENV PATH=/opt/erlang-${OTP_VERSION}/bin:$PATH
 
 WORKDIR /
