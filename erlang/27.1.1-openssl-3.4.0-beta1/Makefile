@@ -43,10 +43,10 @@ ubuntu-22.04-multi-arch:
 	docker manifest create --amend shiguredo/erlang:otp-${ERL_VERSION}-ubuntu-22.04 \
 		shiguredo/erlang:otp-${ERL_VERSION}-ubuntu-22.04-x86_64 \
 		shiguredo/erlang:otp-${ERL_VERSION}-ubuntu-22.04-arm64v8
-	docker manifest push shiguredo/erlang:otp-${ERL_VERSION}-ubuntu-22.04
+	# docker manifest push shiguredo/erlang:otp-${ERL_VERSION}-ubuntu-22.04
 
 ubuntu-24.04-multi-arch:
 	docker manifest create --amend shiguredo/erlang:otp-${ERL_VERSION}-ubuntu-24.04 \
 		shiguredo/erlang:otp-${ERL_VERSION}-ubuntu-24.04-x86_64 \
 		shiguredo/erlang:otp-${ERL_VERSION}-ubuntu-24.04-arm64v8
-	docker manifest push shiguredo/erlang:otp-${ERL_VERSION}-ubuntu-24.04
+	# docker manifest push shiguredo/erlang:otp-${ERL_VERSION}-ubuntu-24.04
