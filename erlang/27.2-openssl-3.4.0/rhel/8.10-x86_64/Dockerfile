@@ -22,7 +22,7 @@ RUN curl -sSL "https://github.com/openssl/openssl/releases/download/openssl-${OP
     | tar -v -C /usr/local/src -xz \
   && cd /usr/local/src/openssl-${OPENSSL_VERSION} \
   && ./config --prefix=/opt/openssl-${OPENSSL_VERSION} no-shared no-module \
-  && make -j \
+  && make -j$(( $(nproc) - 1 )) \
   && make install_sw \
   && cd .. \
   && rm -rf openssl-${OPENSSL_VERSION}
@@ -56,7 +56,7 @@ RUN git config --global http.postBuffer 524288000 \
                  --without-mnesia \
                  --without-snmp \
                  --without-erl_docgen \
-  && make -j \
+  && make -j$(( $(nproc) - 1 )) \
   && make install \
   && cd .. \
   && rm -rf otp_src_${OTP_VERSION}
