@@ -56,8 +56,6 @@ RUN git config --global http.postBuffer 524288000 \
                  --without-mnesia \
                  --without-snmp \
                  --without-erl_docgen \
-                 --without-edoc \
-                 --without-xmerl \
                  --without-ssh \
                  --without-mnesia \
   && make -j$(( $(nproc) - 1 )) \
