@@ -40,4 +40,4 @@ jobs:
         uses: actions/checkout@v4
       - name: Erlang/OTP Dockerfile Build ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
         run: make ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
-        working-directory: ./erlang/${{ OTP_VERSION }}-openssl-${{ OPENSSL_VERSION }}
+        working-directory: ./erlang/${{ env.OTP_VERSION }}-openssl-${{ env.OPENSSL_VERSION }}
