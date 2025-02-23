@@ -12,7 +12,7 @@ env:
   OPENSSL_VERSION: 3.4.1
 
 jobs:
-  job:
+  build_push_job:
     strategy:
       matrix:
         platform:
@@ -42,8 +42,6 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
       - name: Checkout
