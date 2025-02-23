@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "*"
+
+env:
+  REGISTRY: ghcr.io
+  OTP_VERSION: 27.2.4
+  OPENSSL_VERSION: 3.4.1
+
+jobs:
+  build_job:
+    strategy:
+      matrix:
+        platform:
+          - os: ubuntu-24.04
+            arch: x86_64
+          - os: ubuntu-24.04
+            arch: arm64v8
+          - os: ubuntu-22.04
+            arch: x86_64
+          - os: ubuntu-22.04
+            arch: arm64v8
+          - os: rhel-9.5
+            arch: x86_64
+          - os: rhel-8.10
+            arch: x86_64
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Erlang/OTP Dockerfile Build ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+        run: make ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+        working-directory: ./erlang/${{ OTP_VERSION }}-openssl-${{ OPENSSL_VERSION }}
