@@ -1,10 +1,16 @@
-# Dockerfile 置き場
+# Erlang/OTP Dockerfile 置き場
 
-内容と管理ポリシー
+- RHEL x86_64
+  - 8
+  - 9
+- Ubuntu x86_64
+  - 22.04
+  - 24.04
+- Ubuntu arm64v8
+  - 22.04
+  - 24.04
 
-- `erlang/` 以下
-  - Erlang/OTP 入りイメージ
-  - RHEL 8 / 9 x86_64
-  - Ubuntu 20.04 / 22.04 / 24.04 x86_64
-  - Ubuntu 20.04 / 22.04 / 24.04 arm64v8
-  - Erlang/OTP のリリースに追従していく
+## 管理ポリシー
+
+- Erlang/OTP 入りイメージ
+- Erlang/OTP のリリースに追従していく
