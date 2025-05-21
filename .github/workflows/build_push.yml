@@ -29,7 +29,10 @@ jobs:
             os: ubuntu-22.04
             arch: arm64v8
           - runs-on: ubuntu-24.04
-            os: rhel-9.5
+            os: rhel-10.0
+            arch: x86_64
+          - runs-on: ubuntu-24.04
+            os: rhel-9.6
             arch: x86_64
           - runs-on: ubuntu-24.04
             os: rhel-8.10
