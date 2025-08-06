@@ -1,7 +1,7 @@
-FROM arm64v8/ubuntu:24.04
+FROM arm64v8/ubuntu:22.04
 
 ENV OPENSSL_VERSION=3.5.2
-ENV OTP_VERSION=28.0.1
+ENV OTP_VERSION=28.0.2
 
 RUN apt-get update \
   && apt-get install -y \

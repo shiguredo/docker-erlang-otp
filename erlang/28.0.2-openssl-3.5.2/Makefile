@@ -1,5 +1,5 @@
 .PHONY: all rhel-8.10-x86_64 rhel-9.6-x86_64 rhel-10.0-x86_64 ubuntu-22.04-x86_64 ubuntu-24.04-x86_64 
-ERL_VERSION=28.0.1-openssl-3.5.2
+ERL_VERSION=28.0.2-openssl-3.5.2
 
 all: x86_64 arm64v8
 

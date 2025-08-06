@@ -2,7 +2,7 @@ FROM redhat/ubi8:8.10
 
 LABEL maintainer="v@shiguredo.jp"
 
-ENV OTP_VERSION=28.0.1
+ENV OTP_VERSION=28.0.2
 ENV OPENSSL_VERSION=3.5.2
 
 RUN dnf -y update \

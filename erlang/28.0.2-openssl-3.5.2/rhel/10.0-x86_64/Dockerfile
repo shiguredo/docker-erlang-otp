@@ -1,23 +1,22 @@
-FROM ubuntu:24.04
+FROM redhat/ubi10:10.0
 
+LABEL maintainer="v@shiguredo.jp"
+
+ENV OTP_VERSION=28.0.2
 ENV OPENSSL_VERSION=3.5.2
-ENV OTP_VERSION=28.0.1
 
-RUN apt-get update \
-  && apt-get install -y \
-         --no-install-recommends \
-         autoconf \
+RUN dnf -y update \
+  && dnf clean all \
+  && dnf -y install \
          git \
-         build-essential \
-         curl \
-         ca-certificates \
-         ncurses-dev \
-         libncurses5-dev \
-         libva-dev \
-         libdrm-dev \
-         ffmpeg \
-  && apt-get clean \
-  && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
+         gcc \
+         autoconf \
+         glibc-devel \
+         make \
+         ncurses-devel \
+         tar \
+         perl \
+  && dnf clean all
 
 RUN curl -sSL "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz" \
     | tar -v -C /usr/local/src -xz \

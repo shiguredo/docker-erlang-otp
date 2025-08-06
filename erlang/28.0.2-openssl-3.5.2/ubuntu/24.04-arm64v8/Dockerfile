@@ -1,22 +1,17 @@
-FROM redhat/ubi9:9.6
+FROM arm64v8/ubuntu:24.04
 
-LABEL maintainer="v@shiguredo.jp"
-
-ENV OTP_VERSION=28.0.1
 ENV OPENSSL_VERSION=3.5.2
+ENV OTP_VERSION=28.0.2
 
-RUN dnf -y update \
-  && dnf clean all \
-  && dnf -y install \
-         git \
-         gcc \
+RUN apt-get update \
+  && apt-get install -y \
          autoconf \
-         glibc-devel \
-         make \
-         ncurses-devel \
-         tar \
-         perl \
-  && dnf clean all
+         git \
+         build-essential \
+         curl \
+         ncurses-dev \
+  && apt-get clean \
+  && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
 
 RUN curl -sSL "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz" \
     | tar -v -C /usr/local/src -xz \

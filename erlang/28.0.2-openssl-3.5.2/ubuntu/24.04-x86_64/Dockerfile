@@ -1,15 +1,21 @@
-FROM arm64v8/ubuntu:22.04
+FROM ubuntu:24.04
 
 ENV OPENSSL_VERSION=3.5.2
-ENV OTP_VERSION=28.0.1
+ENV OTP_VERSION=28.0.2
 
 RUN apt-get update \
   && apt-get install -y \
+         --no-install-recommends \
          autoconf \
          git \
          build-essential \
          curl \
+         ca-certificates \
          ncurses-dev \
+         libncurses5-dev \
+         libva-dev \
+         libdrm-dev \
+         ffmpeg \
   && apt-get clean \
   && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
 
