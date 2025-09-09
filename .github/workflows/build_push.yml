@@ -9,7 +9,7 @@ on:
 env:
   REGISTRY: ghcr.io
   OTP_VERSION: "28.0.2"
-  OPENSSL_VERSION: "3.5.2"
+  OPENSSL_VERSION: "3.6.0-alpha1"
 
 jobs:
   build_push_job:
