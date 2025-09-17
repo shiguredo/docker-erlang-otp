@@ -16,6 +16,7 @@ RUN dnf -y update \
          ncurses-devel \
          tar \
          perl \
+         perl-Time-Piece \
   && dnf clean all
 
 RUN curl -sSL "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz" \
