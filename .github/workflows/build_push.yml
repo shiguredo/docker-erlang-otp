@@ -32,7 +32,7 @@ jobs:
             os: rhel-10.1
             arch: x86_64
           - runs-on: ubuntu-24.04
-            os: rhel-9.6
+            os: rhel-9.7
             arch: x86_64
           - runs-on: ubuntu-24.04
             os: rhel-8.10
