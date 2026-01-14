@@ -5,15 +5,17 @@
 ## 対応プラットフォーム
 
 - RHEL x86_64
-  - 8
-  - 9
   - 10
+  - 9
+  - 8
 - Ubuntu x86_64
-  - 22.04
+  - 26.04
   - 24.04
+  - 22.04
 - Ubuntu arm64v8
-  - 22.04
+  - 26.04
   - 24.04
+  - 22.04
 
 ## 管理ポリシー
 
@@ -25,7 +27,7 @@
 Apache License 2.0
 
 ```text
-Copyright 2015-2025, Shiguredo Inc.
+Copyright 2015-2026, Shiguredo Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
