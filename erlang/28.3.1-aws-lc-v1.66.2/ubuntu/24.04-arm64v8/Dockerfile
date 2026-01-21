@@ -1,6 +1,6 @@
 FROM arm64v8/ubuntu:24.04
 
-ENV AWSLC_VERSION=1.66.2
+ENV AWSLC_VERSION=v1.66.2
 ENV OTP_VERSION=28.3.1
 
 RUN apt-get update \
@@ -17,7 +17,7 @@ RUN apt-get update \
   && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
 
 # Build AWS-LC
-RUN git clone --depth 1 -b v${AWSLC_VERSION} https://github.com/aws/aws-lc /usr/local/src/aws-lc \
+RUN git clone --depth 1 -b ${AWSLC_VERSION} https://github.com/aws/aws-lc /usr/local/src/aws-lc \
   && cd /usr/local/src/aws-lc \
   && cmake -GNinja -B build \
        -DCMAKE_BUILD_TYPE=Release \

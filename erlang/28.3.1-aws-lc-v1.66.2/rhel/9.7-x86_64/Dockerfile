@@ -1,20 +1,24 @@
-FROM arm64v8/ubuntu:22.04
+FROM redhat/ubi9:9.7
 
-ENV AWSLC_VERSION=v1.66.2
 ENV OTP_VERSION=28.3.1
+ENV AWSLC_VERSION=v1.66.2
 
-RUN apt-get update \
-  && apt-get install -y \
-         autoconf \
+RUN dnf -y update \
+  && dnf clean all \
+  && dnf -y install \
          git \
-         build-essential \
-         curl \
-         libncurses-dev \
+         gcc \
+         gcc-c++ \
+         autoconf \
+         glibc-devel \
+         make \
+         ncurses-devel \
+         tar \
+         perl \
          cmake \
          ninja-build \
          golang \
-  && apt-get clean \
-  && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
+  && dnf clean all
 
 # Build AWS-LC
 RUN git clone --depth 1 -b ${AWSLC_VERSION} https://github.com/aws/aws-lc /usr/local/src/aws-lc \
