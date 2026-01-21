@@ -102,15 +102,6 @@ jobs:
           - runs-on: ubuntu-22.04-arm
             os: ubuntu-22.04
             arch: arm64v8
-          - runs-on: ubuntu-24.04
-            os: rhel-10.1
-            arch: x86_64
-          - runs-on: ubuntu-24.04
-            os: rhel-9.7
-            arch: x86_64
-          - runs-on: ubuntu-24.04
-            os: rhel-8.10
-            arch: x86_64
     runs-on: ${{ matrix.platform.runs-on }}
     env:
       AWSLC_VERSION: "v1.66.2"
