@@ -55,11 +55,25 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check if image exists
+        id: check
+        run: |
+          IMAGE_TAG="${{ env.REGISTRY }}/shiguredo/erlang:otp-${{ env.OTP_VERSION }}-openssl-${{ env.OPENSSL_VERSION }}-${{ matrix.platform.os }}-${{ matrix.platform.arch }}"
+          if docker manifest inspect "$IMAGE_TAG" > /dev/null 2>&1; then
+            echo "Image already exists: $IMAGE_TAG"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Image does not exist: $IMAGE_TAG"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
       - name: Setup Buildx
+        if: steps.check.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
       - name: Checkout
+        if: steps.check.outputs.exists == 'false'
         uses: actions/checkout@v4
       - name: Erlang/OTP Dockerfile Build ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+        if: steps.check.outputs.exists == 'false'
         run: make ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
         working-directory: ./erlang/${{ env.OTP_VERSION }}-openssl-${{ env.OPENSSL_VERSION }}
 
@@ -88,6 +102,15 @@ jobs:
           - runs-on: ubuntu-22.04-arm
             os: ubuntu-22.04
             arch: arm64v8
+          - runs-on: ubuntu-24.04
+            os: rhel-10.1
+            arch: x86_64
+          - runs-on: ubuntu-24.04
+            os: rhel-9.7
+            arch: x86_64
+          - runs-on: ubuntu-24.04
+            os: rhel-8.10
+            arch: x86_64
     runs-on: ${{ matrix.platform.runs-on }}
     env:
       AWSLC_VERSION: "v1.66.2"
@@ -98,10 +121,24 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check if image exists
+        id: check
+        run: |
+          IMAGE_TAG="${{ env.REGISTRY }}/shiguredo/erlang:otp-${{ env.OTP_VERSION }}-aws-lc-${{ env.AWSLC_VERSION }}-${{ matrix.platform.os }}-${{ matrix.platform.arch }}"
+          if docker manifest inspect "$IMAGE_TAG" > /dev/null 2>&1; then
+            echo "Image already exists: $IMAGE_TAG"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Image does not exist: $IMAGE_TAG"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
       - name: Setup Buildx
+        if: steps.check.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
       - name: Checkout
+        if: steps.check.outputs.exists == 'false'
         uses: actions/checkout@v4
       - name: Erlang/OTP Dockerfile Build ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+        if: steps.check.outputs.exists == 'false'
         run: make ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
         working-directory: ./erlang/${{ env.OTP_VERSION }}-aws-lc-${{ env.AWSLC_VERSION }}
