@@ -1,0 +1,812 @@
+diff --git a/HOWTO/TESTING.md b/HOWTO/TESTING.md
+index b440445f1c..8e509be8b8 100644
+--- a/HOWTO/TESTING.md
++++ b/HOWTO/TESTING.md
+@@ -118,6 +118,33 @@ make emulator_test ARGS="-suite binary_SUITE -case deep_bitstr_lists"
+ 
+ For more examples see [DEVELOPMENT.md](DEVELOPMENT.md)
+ 
++Run ssl tests with AWS-LC
++-------------------------
++
++Use `scripts/run-ssl-tests-with-awslc` to run `lib/ssl` tests with an OTP build
++linked against AWS-LC.
++
++```bash
++cd $ERL_TOP
++
++# Run one ssl suite with AWS-LC
++./scripts/run-ssl-tests-with-awslc --args "-suite openssl_cipher_suite_SUITE"
++
++# Run all lib/ssl tests with AWS-LC
++./scripts/run-ssl-tests-with-awslc
++```
++
++By default the script downloads AWS-LC `v1.67.0` into `$ERL_TOP/.awslc/`,
++configures OTP with `--with-ssl`, verifies that `crypto:info_lib()` reports
++`AWS-LC`, and then runs `make test` in `lib/ssl` with
++`-multiply_timetraps 4` for stability.
++
++To disable timetrap multiplication, pass:
++
++```bash
++./scripts/run-ssl-tests-with-awslc --timetrap-multiplier 0
++```
++
+ Releasing tests
+ ---------------
+ 
+diff --git a/lib/crypto/c_src/cipher.c b/lib/crypto/c_src/cipher.c
+index b57563b3a7..cf52dc0f5a 100644
+--- a/lib/crypto/c_src/cipher.c
++++ b/lib/crypto/c_src/cipher.c
+@@ -43,7 +43,11 @@ static struct cipher_type_t cipher_types[] =
+ 
+ #ifdef HAVE_DES
+     {{"des_cbc"}, "des-cbc", {&EVP_des_cbc},  0, NO_FIPS_CIPHER},
++# ifdef HAVE_DES_CFB8
+     {{"des_cfb"}, "des-cfb", {&EVP_des_cfb8}, 0, NO_FIPS_CIPHER},
++# else
++    {{"des_cfb"}, "des-cfb", {NULL}, 0, 0},
++# endif
+     {{"des_ecb"}, "des-ecb", {&EVP_des_ecb},  0, NO_FIPS_CIPHER | ECB_BUG_0_9_8L},
+ #else
+     {{"des_cbc"}, "des-cbc", {NULL}, 0, 0},
+diff --git a/lib/crypto/c_src/crypto.c b/lib/crypto/c_src/crypto.c
+index 7cb4068063..c92602f43e 100644
+--- a/lib/crypto/c_src/crypto.c
++++ b/lib/crypto/c_src/crypto.c
+@@ -57,7 +57,7 @@
+ /* NIF interface declarations */
+ static int load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info);
+ static int upgrade(ErlNifEnv* env, void** priv_data, void** old_priv_data, ERL_NIF_TERM load_info);
+-#if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,1,0) && !defined(HAS_LIBRESSL)
++#if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,1,0) && !defined(HAS_LIBRESSL) && !defined(HAS_AWSLC)
+ static void unload_thread(void* priv_data);
+ #endif
+ static void unload(ErlNifEnv* env, void* priv_data);
+@@ -249,7 +249,7 @@ static int initialize(ErlNifEnv* env, ERL_NIF_TERM load_info)
+         ret = __LINE__; goto done;
+     }
+ 
+-#if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,1,0) && !defined(HAS_LIBRESSL)
++#if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,1,0) && !defined(HAS_LIBRESSL) && !defined(HAS_AWSLC)
+     enif_set_option(env, ERL_NIF_OPT_ON_UNLOAD_THREAD, unload_thread);
+ #endif
+ 
+@@ -384,7 +384,8 @@ static int upgrade(ErlNifEnv* env, void** priv_data, void** old_priv_data,
+     return 0;
+ }
+ 
+-#if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,1,0) && !defined(HAS_LIBRESSL)
++/* AWS-LC does not provide OPENSSL_thread_stop. */
++#if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,1,0) && !defined(HAS_LIBRESSL) && !defined(HAS_AWSLC)
+ static void unload_thread(void* priv_data)
+ {
+     if (library_refc == 1) {
+@@ -411,4 +412,3 @@ static void unload(ErlNifEnv* env, void* priv_data)
+          */
+     }
+ }
+-
+diff --git a/lib/crypto/c_src/ec.c b/lib/crypto/c_src/ec.c
+index 8cb9604497..da378d60f4 100644
+--- a/lib/crypto/c_src/ec.c
++++ b/lib/crypto/c_src/ec.c
+@@ -668,8 +668,13 @@ static EC_KEY* ec_key_new(ErlNifEnv* env, ERL_NIF_TERM curve_arg, size_t *size)
+         goto err;
+ 
+     if (enif_inspect_binary(env, prime[2], &seed)) {
++        /* AWS-LC: EC_GROUP_set_seed() is a no-op and returns 0; ignore the return value. */
++#ifndef HAS_AWSLC
+         if (!EC_GROUP_set_seed(group, seed.data, seed.size))
+             goto err;
++#else
++        (void)EC_GROUP_set_seed(group, seed.data, seed.size);
++#endif
+     }
+ 
+     if (!term2point(env, curve[2], group, &point))
+diff --git a/lib/crypto/c_src/openssl_config.h b/lib/crypto/c_src/openssl_config.h
+index f525aeccc1..5e29b6bf52 100644
+--- a/lib/crypto/c_src/openssl_config.h
++++ b/lib/crypto/c_src/openssl_config.h
+@@ -58,6 +58,37 @@
+ # include <openssl/provider.h>
+ #endif
+ 
++/* AWS-LC compatibility shims.
++ * AWS-LC uses generic AEAD control codes instead of CCM-specific ones.
++ * AWS-LC does not provide EVP_CIPHER_type() or OPENSSL_ECC_MAX_FIELD_BITS.
++ * AWS-LC removes BN_FLG_CONSTTIME; constant-time operations are default.
++ */
++#ifdef HAS_AWSLC
++# ifndef EVP_CTRL_CCM_SET_IVLEN
++#  define EVP_CTRL_CCM_SET_IVLEN EVP_CTRL_AEAD_SET_IVLEN
++# endif
++# ifndef EVP_CTRL_CCM_GET_TAG
++#  define EVP_CTRL_CCM_GET_TAG EVP_CTRL_AEAD_GET_TAG
++# endif
++# ifndef EVP_CTRL_CCM_SET_TAG
++#  define EVP_CTRL_CCM_SET_TAG EVP_CTRL_AEAD_SET_TAG
++# endif
++# ifndef EVP_CIPHER_type
++#  define EVP_CIPHER_type(cipher) EVP_CIPHER_nid(cipher)
++# endif
++# ifndef OPENSSL_ECC_MAX_FIELD_BITS
++#  define OPENSSL_ECC_MAX_FIELD_BITS 661
++# endif
++/* AWS-LC removes BN_FLG_CONSTTIME; constant-time operations are default. */
++# ifndef BN_FLG_CONSTTIME
++#  define BN_FLG_CONSTTIME 0
++# endif
++/* AWS-LC does not define EVP_PKEY_CMAC but does define NID_cmac. */
++# ifndef EVP_PKEY_CMAC
++#  define EVP_PKEY_CMAC NID_cmac
++# endif
++#endif
++
+ /* LibreSSL was cloned from OpenSSL 1.0.1g and claims to be API and BPI compatible
+  * with 1.0.1.
+  *
+@@ -119,7 +150,10 @@
+ 
+ # if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,1,1)
+ #   define HAVE_PKEY_new_raw_private_key
++/* AWS-LC does not provide EVP_PKEY_new_CMAC_key. */
++#  ifndef HAS_AWSLC
+ #   define HAVE_EVP_PKEY_new_CMAC_key
++#  endif
+ #   define HAVE_DigestSign_as_single_op
+ # endif
+ #endif
+@@ -158,7 +192,8 @@
+ #endif
+ 
+ 
+-#if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,0,0)
++/* AWS-LC does not provide modes.h (CRYPTO_gcm128_* APIs). */
++#if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,0,0) && !defined(HAS_AWSLC)
+ #include <openssl/modes.h>
+ #endif
+ 
+@@ -247,7 +282,8 @@
+ #ifndef OPENSSL_NO_DES
+ # define HAVE_DES
+ 
+-# if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION(0,9,7,'e')
++/* AWS-LC does not provide EVP_des_cfb8 / EVP_des_ede3_cfb8. */
++# if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION(0,9,7,'e') && !defined(HAS_AWSLC)
+ #  define HAVE_DES_ede3_cfb
+ # endif
+ 
+@@ -256,6 +292,13 @@
+ # endif
+ #endif
+ 
++/* AWS-LC does not provide EVP_des_cfb8. */
++#if defined(HAS_AWSLC)
++# undef HAVE_DES_CFB8
++#else
++# define HAVE_DES_CFB8
++#endif
++
+ #ifndef OPENSSL_NO_DH
+ # define HAVE_DH
+ #endif
+@@ -298,6 +341,7 @@
+ // (test for >= 1.1.1pre8)
+ #if OPENSSL_VERSION_NUMBER >= (PACKED_OPENSSL_VERSION_PLAIN(1,1,1) -7) \
+     && !defined(HAS_LIBRESSL) \
++    && !defined(HAS_AWSLC) \
+     && defined(HAVE_EC)
+ # ifdef HAVE_DH
+ #   define HAVE_X25519
+@@ -309,6 +353,14 @@
+ # endif
+ #endif
+ 
++/* AWS-LC only provides Ed25519/X25519 (no Ed448/X448). */
++#if defined(HAS_AWSLC) && defined(HAVE_EC)
++# ifdef HAVE_DH
++#   define HAVE_X25519
++# endif
++# define HAVE_ED25519
++#endif
++
+ #if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,0,1)
+ # define HAVE_EVP_AES_CTR
+ # define HAVE_AEAD
+@@ -335,18 +387,22 @@
+ # endif
+ #endif
+ 
++/* AWS-LC does not provide EVP_chacha20 (only EVP_chacha20_poly1305). */
+ #if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION(1,1,0,'d')
+ # ifndef HAS_LIBRESSL
+ #  ifndef OPENSSL_NO_CHACHA
++#   ifndef HAS_AWSLC
+ #    define HAVE_CHACHA20
++#   endif
+ #  endif
+ # endif
+ #endif
+ 
+ // OPENSSL_VERSION_NUMBER >= 1.1.1-pre8
++/* AWS-LC does not provide EVP_PKEY_POLY1305. */
+ #if OPENSSL_VERSION_NUMBER >= (PACKED_OPENSSL_VERSION_PLAIN(1,1,1)-7)
+ # ifndef HAS_LIBRESSL
+-#  if !defined(OPENSSL_NO_POLY1305)
++#  if !defined(OPENSSL_NO_POLY1305) && !defined(HAS_AWSLC)
+ #    define HAVE_POLY1305
+ #  endif
+ # endif
+diff --git a/lib/crypto/c_src/openssl_version.h b/lib/crypto/c_src/openssl_version.h
+index 657e114eb4..4929b897ba 100644
+--- a/lib/crypto/c_src/openssl_version.h
++++ b/lib/crypto/c_src/openssl_version.h
+@@ -32,6 +32,11 @@
+ # define HAS_LIBRESSL_VSN 0
+ #endif
+ 
++/* Defined by AWS-LC in <openssl/base.h>. */
++#ifdef OPENSSL_IS_AWSLC
++# define HAS_AWSLC
++#endif
++
+ /* Helper macros to construct a OPENSSL_VERSION_NUMBER.
+  * See openssl/opensslv.h
+  */
+diff --git a/lib/ssh/test/ssh_compat_SUITE_data/build_scripts/create-ssh-image b/lib/ssh/test/ssh_compat_SUITE_data/build_scripts/create-ssh-image
+index 878b39d8db..f6da9b3a71 100755
+--- a/lib/ssh/test/ssh_compat_SUITE_data/build_scripts/create-ssh-image
++++ b/lib/ssh/test/ssh_compat_SUITE_data/build_scripts/create-ssh-image
+@@ -36,6 +36,17 @@ esac
+ 
+ FAMssl=$3
+ VERssl=$4
++CONFIG_ENV="LDFLAGS=-Wl,-R/buildroot/ssl/lib"
++CONFIG_FLAGS=
++
++case $FAMssl in
++    awslc)
++	# AWS-LC intentionally removed BN_FLG_CONSTTIME while keeping BN_set_flags as no-op.
++	CONFIG_ENV="CPPFLAGS=-DBN_FLG_CONSTTIME=0 ${CONFIG_ENV}"
++	# AWS-LC does not provide PKCS#11 wrapper symbols used by OpenSSH's PKCS#11 code.
++	CONFIG_FLAGS=--disable-pkcs11
++	;;
++esac
+ 
+ INPUT_FILE=$5
+ 
+@@ -63,11 +74,11 @@ cat - > TempDockerFile <<EOF
+     WORKDIR ${FAMssh}-${VERssh}
+ 
+     # Probably VERY OpenSSH dependent...:
+-    RUN ./configure --without-pie \
+-                    --prefix=/buildroot/ssh \
+-                    --with-ssl-dir=/buildroot/ssl \
+-                    --with-pam \
+-                    LDFLAGS=-Wl,-R/buildroot/ssl/lib
++    RUN env ${CONFIG_ENV} ./configure --without-pie \
++                                      --prefix=/buildroot/ssh \
++                                      --with-ssl-dir=/buildroot/ssl \
++                                      --with-pam \
++                                      ${CONFIG_FLAGS}
+     RUN  make
+     RUN  make install
+     RUN  echo UsePAM yes >> /buildroot/ssh/etc/sshd_config
+@@ -94,7 +105,8 @@ fi
+ 
+ # Build the image:
+ docker build -t  ssh_compat_suite-ssh:$VER -f ./TempDockerFile .
++RES=$?
+ 
+ # Cleaning
+ rm -fr ./TempDockerFile $TMP
+-
++exit $RES
+diff --git a/lib/ssh/test/ssh_compat_SUITE_data/build_scripts/create-ssl-image b/lib/ssh/test/ssh_compat_SUITE_data/build_scripts/create-ssl-image
+index d8b57e4e19..6569ee4053 100755
+--- a/lib/ssh/test/ssh_compat_SUITE_data/build_scripts/create-ssl-image
++++ b/lib/ssh/test/ssh_compat_SUITE_data/build_scripts/create-ssl-image
+@@ -20,7 +20,7 @@
+ # %CopyrightEnd%
+ 
+ 
+-# ./create-image openssl 1.0.2m [in-file] 
++# ./create-image openssl|libressl|awslc version [in-file]
+ 
+ case "$1" in
+     "openssl")
+@@ -29,6 +29,7 @@ case "$1" in
+ 	PFX=https://www.openssl.org/source/openssl-
+ 	SFX=.tar.gz
+ 	TMP=tmp.tar.gz
++	SRC_DIR=${FAM}-${VER}
+ 	;;
+     "libressl")
+ 	FAM=libressl
+@@ -36,6 +37,15 @@ case "$1" in
+ 	PFX=https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-
+ 	SFX=.tar.gz
+ 	TMP=tmp.tar.gz
++	SRC_DIR=${FAM}-${VER}
++	;;
++    "awslc")
++	FAM=awslc
++	VER=$2
++	PFX=https://github.com/aws/aws-lc/archive/refs/tags/v
++	SFX=.tar.gz
++	TMP=tmp.tar.gz
++	SRC_DIR=aws-lc-${VER}
+ 	;;
+     *)
+ 	echo No lib type
+@@ -61,6 +71,37 @@ esac
+ # and the docker server restarted. That is not possible without root access.
+ 
+ # Make a Dockerfile. This method simplifies env variable handling considerably:
++if [ "x$FAM" = "xawslc" ]
++then
++cat - > TempDockerFile <<EOF
++
++    FROM ssh_compat_suite-ubuntu:latest
++
++    LABEL version=$FAM-$VER
++
++    WORKDIR /buildroot
++    RUN  apt-get update
++    RUN  apt-get -y install cmake
++
++    COPY ${TMP} .
++    RUN  tar xf ${TMP}
++
++    WORKDIR ${SRC_DIR}
++    RUN  mkdir build
++
++    WORKDIR build
++    RUN  cmake -DDISABLE_GO=ON \
++               -DBUILD_SHARED_LIBS=1 \
++               -DBUILD_TESTING=OFF \
++               -DBUILD_TOOL=OFF \
++               -DCMAKE_BUILD_TYPE=Release \
++               -DCMAKE_INSTALL_PREFIX=/buildroot/ssl ..
++    RUN  make
++    RUN  make install
++
++    RUN  echo Built ${FAM}-${VER}
++EOF
++else
+ cat - > TempDockerFile <<EOF
+ 
+     FROM ssh_compat_suite-ubuntu:latest
+@@ -72,7 +113,7 @@ cat - > TempDockerFile <<EOF
+     COPY ${TMP} .
+     RUN  tar xf ${TMP}
+ 
+-    WORKDIR ${FAM}-${VER}
++    WORKDIR ${SRC_DIR}
+ 
+     RUN  ./config --prefix=/buildroot/ssl ${CONFIG_FLAGS}
+ 
+@@ -81,6 +122,7 @@ cat - > TempDockerFile <<EOF
+ 
+     RUN  echo Built ${FAM}-${VER}
+ EOF
++fi
+ 
+ # Fetch the tar file. This could be done in an "ADD ..." in the Dockerfile,
+ # but then we hit the proxy problem...
+@@ -97,6 +139,8 @@ fi
+ 
+ # Build the image:
+ docker build -t ssh_compat_suite-$FAM:$VER -f ./TempDockerFile .
++RES=$?
+ 
+ # Cleaning
+ rm -fr ./TempDockerFile $TMP
++exit $RES
+diff --git a/lib/ssh/test/ssh_compat_SUITE_data/build_scripts/create_all b/lib/ssh/test/ssh_compat_SUITE_data/build_scripts/create_all
+index 5a9612e323..4abb7d5585 100755
+--- a/lib/ssh/test/ssh_compat_SUITE_data/build_scripts/create_all
++++ b/lib/ssh/test/ssh_compat_SUITE_data/build_scripts/create_all
+@@ -19,7 +19,8 @@
+ #
+ # %CopyrightEnd%
+ 
+-UBUNTU_VERSION=16.04
++DEFAULT_UBUNTU_VERSION=16.04
++AWSLC_UBUNTU_VERSION=24.04
+ 
+ SSH_SSL_VERSIONS=(\
+         openssh 4.4p1  openssl  0.9.8c  \
+@@ -45,6 +46,7 @@ SSH_SSL_VERSIONS=(\
+         openssh 7.9p1  libressl 2.6.4   \
+                                         \
+ 	openssh 8.2p1  openssl  1.0.2p  \
++	openssh 9.9p2  awslc    1.67.0  \
+ 	)
+ 
+ if [ "x$1" == "x-b" ]
+@@ -61,8 +63,15 @@ function create_one_image ()
+     SSH_VER=$2
+     SSL_FAM=$3
+     SSL_VER=$4
++    BASE_UBUNTU_VERSION=$DEFAULT_UBUNTU_VERSION
+ 
+-    [ "x$SKIP_CREATE_BASE" == "xtrue" ] || ./create-base-image || (echo "Create base failed." >&2; exit 1)
++    case $SSL_FAM in
++	awslc)
++	    BASE_UBUNTU_VERSION=$AWSLC_UBUNTU_VERSION
++	    ;;
++    esac
++
++    [ "x$SKIP_CREATE_BASE" == "xtrue" ] || ./create-base-image $BASE_UBUNTU_VERSION || (echo "Create base failed." >&2; exit 1)
+     ./create-ssl-image $SSL_FAM $SSL_VER  \
+ 	|| (echo "Create $SSL_FAM $SSL_VER failed." >&2; exit 2)
+ 
+@@ -83,7 +92,7 @@ case ${WHAT_TO_DO} in
+     build_one)
+ 	if [ $# != 5 ]
+ 	then
+-	    echo "$0 build_one openssh SSH_ver  openssl SSL_ver " && exit 
++	    echo "$0 build_one openssh SSH_ver  openssl|libressl|awslc SSL_ver " && exit 
+ 	else
+ 	    create_one_image $2 $3 $4 $5
+ 	    exit
+@@ -92,7 +101,7 @@ case ${WHAT_TO_DO} in
+     build_all)
+ 	;;
+     *)
+-	echo "$0 [-b] list | listatoms | build_one openssh SSH_ver openssl SSL_ver | build_all" && exit
++	echo "$0 [-b] list | listatoms | build_one openssh SSH_ver openssl|libressl|awslc SSL_ver | build_all" && exit
+ 	;;
+ esac
+  
+diff --git a/lib/ssl/test/ssl_test_lib.erl b/lib/ssl/test/ssl_test_lib.erl
+index 97862613ab..93198f1f07 100644
+--- a/lib/ssl/test/ssl_test_lib.erl
++++ b/lib/ssl/test/ssl_test_lib.erl
+@@ -573,10 +573,16 @@ list_1_2_sig_algs() ->
+     ].
+ 
+ %% For now always run locally
+-run_where(_) ->
++run_where(Config) ->
+     ClientNode = node(),
+     ServerNode = node(),
+-    Host = rpc:call(ServerNode, net_adm, localhost, []),
++    Host0 = rpc:call(ServerNode, net_adm, localhost, []),
++    Host = case {proplists:get_value(protocol, Config), is_awslc_backend()} of
++               {dtls, true} ->
++                   {127,0,0,1};
++               _ ->
++                   Host0
++           end,
+     {ClientNode, ServerNode, Host}.
+ 
+ run_where(_, ipv6) ->
+@@ -599,6 +605,14 @@ normalize_loopback({127,_,_,_}, client) ->
+ normalize_loopback(Address, _) ->
+     Address.
+ 
++is_awslc_backend() ->
++    case crypto:info_lib() of
++        [{_,_, Bin}] when is_binary(Bin) ->
++            binary:match(Bin, <<"AWS-LC">>) =/= nomatch;
++        _ ->
++            false
++    end.
++
+ 
+ start_server(Args0, Config) ->
+     {_, ServerNode, _} = run_where(Config),
+@@ -3014,18 +3028,33 @@ add_transport(_, Config0) ->
+ sufficient_crypto_support(Version)
+   when Version == 'tlsv1.3' ->
+     CryptoSupport = crypto:supports(),
++    protocol_supported(Version) andalso
+     lists:member(rsa_pkcs1_pss_padding, proplists:get_value(rsa_opts, CryptoSupport)) andalso
+     lists:member(x448, proplists:get_value(curves, CryptoSupport));
+ sufficient_crypto_support(Version)
+   when Version == 'tlsv1.2'; Version == 'dtlsv1.2' ->
+     CryptoSupport = crypto:supports(),
++    protocol_supported(Version) andalso
+     proplists:get_bool(sha256, proplists:get_value(hashs, CryptoSupport));
++sufficient_crypto_support(Version)
++  when Version == 'tlsv1.1'; Version == 'tlsv1'; Version == 'dtlsv1' ->
++    protocol_supported(Version);
+ sufficient_crypto_support(cipher_ec) -> 
+     CryptoSupport = crypto:supports(),
+     proplists:get_bool(ecdh, proplists:get_value(public_keys, CryptoSupport));
+ sufficient_crypto_support(_) ->
+     true.
+ 
++protocol_supported('dtlsv1.2') ->
++    Versions = ssl:versions(),
++    lists:member('dtlsv1.2', proplists:get_value(supported_dtls, Versions));
++protocol_supported('dtlsv1') ->
++    Versions = ssl:versions(),
++    lists:member('dtlsv1', proplists:get_value(supported_dtls, Versions));
++protocol_supported(Version) ->
++    Versions = ssl:versions(),
++    lists:member(Version, proplists:get_value(supported, Versions)).
++
+ check_key_exchange_send_active(Socket, false) ->
+     send_recv_result_active(Socket);
+ check_key_exchange_send_active(Socket, KeyEx) ->
+diff --git a/scripts/run-ssl-tests-with-awslc b/scripts/run-ssl-tests-with-awslc
+new file mode 100755
+index 0000000000..b47c0b6981
+--- /dev/null
++++ b/scripts/run-ssl-tests-with-awslc
+@@ -0,0 +1,268 @@
++#!/usr/bin/env bash
++#
++# %CopyrightBegin%
++#
++# SPDX-License-Identifier: Apache-2.0
++#
++# Copyright Ericsson AB 2026. All Rights Reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++# %CopyrightEnd%
++#
++
++set -euo pipefail
++
++usage() {
++    cat <<EOF
++Usage: $0 [options]
++
++Builds AWS-LC, configures/builds OTP with AWS-LC, and runs ssl tests.
++
++Options:
++  --erl-top PATH            Erlang/OTP source root (default: parent of this script)
++  --awslc-version VERSION   AWS-LC version tag without "v" (default: 1.67.0)
++  --awslc-work-dir PATH     Directory for AWS-LC sources/build artifacts
++  --awslc-install-dir PATH  AWS-LC install prefix
++  --jobs N                  Build jobs (default: number of online CPUs)
++  --timetrap-multiplier N   Common Test -multiply_timetraps value (default: 4, 0 disables)
++  --args "..."              Extra arguments passed to "make test" in lib/ssl
++  --skip-awslc-build        Skip AWS-LC download/build/install
++  --skip-configure          Skip OTP configure
++  --skip-build              Skip OTP build
++  --skip-tests              Skip ssl test execution
++  -h, --help                Show this help
++
++Environment alternatives:
++  ERL_TOP, AWSLC_VERSION, AWSLC_WORK_DIR, AWSLC_INSTALL_DIR, JOBS,
++  TIMETRAP_MULTIPLIER, SSL_TEST_ARGS
++EOF
++}
++
++log() {
++    printf '[awslc-ssl-test] %s\n' "$*"
++}
++
++die() {
++    printf '[awslc-ssl-test] ERROR: %s\n' "$*" >&2
++    exit 1
++}
++
++run() {
++    printf '+ %s\n' "$*"
++    "$@"
++}
++
++need_cmd() {
++    command -v "$1" >/dev/null 2>&1 || die "Command not found: $1"
++}
++
++if command -v getconf >/dev/null 2>&1; then
++    DEFAULT_JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
++else
++    DEFAULT_JOBS=4
++fi
++
++SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
++DEFAULT_ERL_TOP="$(cd "${SCRIPT_DIR}/.." && pwd)"
++
++ERL_TOP="${ERL_TOP:-$DEFAULT_ERL_TOP}"
++AWSLC_VERSION="${AWSLC_VERSION:-1.67.0}"
++AWSLC_WORK_DIR="${AWSLC_WORK_DIR:-$ERL_TOP/.awslc}"
++AWSLC_INSTALL_DIR="${AWSLC_INSTALL_DIR:-$AWSLC_WORK_DIR/install-$AWSLC_VERSION}"
++JOBS="${JOBS:-$DEFAULT_JOBS}"
++TIMETRAP_MULTIPLIER="${TIMETRAP_MULTIPLIER:-4}"
++SSL_TEST_ARGS="${SSL_TEST_ARGS:-}"
++AWSLC_INSTALL_DIR_SET=0
++
++SKIP_AWSLC_BUILD=0
++SKIP_CONFIGURE=0
++SKIP_BUILD=0
++SKIP_TESTS=0
++
++while [ $# -gt 0 ]; do
++    case "$1" in
++        --erl-top)
++            [ $# -ge 2 ] || die "Missing value for --erl-top"
++            ERL_TOP="$2"
++            shift 2
++            ;;
++        --awslc-version)
++            [ $# -ge 2 ] || die "Missing value for --awslc-version"
++            AWSLC_VERSION="$2"
++            shift 2
++            ;;
++        --awslc-work-dir)
++            [ $# -ge 2 ] || die "Missing value for --awslc-work-dir"
++            AWSLC_WORK_DIR="$2"
++            shift 2
++            ;;
++        --awslc-install-dir)
++            [ $# -ge 2 ] || die "Missing value for --awslc-install-dir"
++            AWSLC_INSTALL_DIR="$2"
++            AWSLC_INSTALL_DIR_SET=1
++            shift 2
++            ;;
++        --jobs)
++            [ $# -ge 2 ] || die "Missing value for --jobs"
++            JOBS="$2"
++            shift 2
++            ;;
++        --timetrap-multiplier)
++            [ $# -ge 2 ] || die "Missing value for --timetrap-multiplier"
++            TIMETRAP_MULTIPLIER="$2"
++            shift 2
++            ;;
++        --args)
++            [ $# -ge 2 ] || die "Missing value for --args"
++            SSL_TEST_ARGS="$2"
++            shift 2
++            ;;
++        --skip-awslc-build)
++            SKIP_AWSLC_BUILD=1
++            shift
++            ;;
++        --skip-configure)
++            SKIP_CONFIGURE=1
++            shift
++            ;;
++        --skip-build)
++            SKIP_BUILD=1
++            shift
++            ;;
++        --skip-tests)
++            SKIP_TESTS=1
++            shift
++            ;;
++        -h|--help)
++            usage
++            exit 0
++            ;;
++        *)
++            die "Unknown option: $1"
++            ;;
++    esac
++done
++
++if [ "$AWSLC_INSTALL_DIR_SET" -eq 0 ]; then
++    AWSLC_INSTALL_DIR="$AWSLC_WORK_DIR/install-$AWSLC_VERSION"
++fi
++
++[ -d "$ERL_TOP" ] || die "ERL_TOP does not exist: $ERL_TOP"
++[ -f "$ERL_TOP/otp_build" ] || die "Not an OTP source root: $ERL_TOP"
++export ERL_TOP
++
++AWSLC_SRC_DIR="$AWSLC_WORK_DIR/aws-lc-$AWSLC_VERSION"
++AWSLC_BUILD_DIR="$AWSLC_SRC_DIR/build"
++AWSLC_TARBALL="$AWSLC_WORK_DIR/aws-lc-$AWSLC_VERSION.tar.gz"
++AWSLC_URL="https://github.com/aws/aws-lc/archive/refs/tags/v${AWSLC_VERSION}.tar.gz"
++
++if [ "$SKIP_AWSLC_BUILD" -eq 0 ]; then
++    need_cmd cmake
++    need_cmd make
++    need_cmd tar
++    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
++        die "Either curl or wget is required for downloading AWS-LC"
++    fi
++
++    mkdir -p "$AWSLC_WORK_DIR"
++
++    if [ ! -d "$AWSLC_SRC_DIR" ]; then
++        log "Downloading AWS-LC v$AWSLC_VERSION"
++        if command -v curl >/dev/null 2>&1; then
++            run curl -fL -o "$AWSLC_TARBALL" "$AWSLC_URL"
++        else
++            run wget -O "$AWSLC_TARBALL" "$AWSLC_URL"
++        fi
++        run tar -xzf "$AWSLC_TARBALL" -C "$AWSLC_WORK_DIR"
++    else
++        log "Using existing source directory: $AWSLC_SRC_DIR"
++    fi
++
++    log "Building and installing AWS-LC into: $AWSLC_INSTALL_DIR"
++    run cmake -S "$AWSLC_SRC_DIR" -B "$AWSLC_BUILD_DIR" \
++        -DDISABLE_GO=ON \
++        -DBUILD_SHARED_LIBS=1 \
++        -DBUILD_TESTING=OFF \
++        -DBUILD_TOOL=OFF \
++        -DCMAKE_BUILD_TYPE=Release \
++        -DCMAKE_INSTALL_PREFIX="$AWSLC_INSTALL_DIR"
++    run cmake --build "$AWSLC_BUILD_DIR" --parallel "$JOBS"
++    run cmake --install "$AWSLC_BUILD_DIR"
++fi
++
++[ -d "$AWSLC_INSTALL_DIR/include/openssl" ] || die "Missing AWS-LC headers in $AWSLC_INSTALL_DIR"
++
++has_library() {
++    local libbase="$1"
++    compgen -G "$AWSLC_INSTALL_DIR/lib/${libbase}.so*" >/dev/null 2>&1 \
++        || compgen -G "$AWSLC_INSTALL_DIR/lib/${libbase}.dylib*" >/dev/null 2>&1 \
++        || compgen -G "$AWSLC_INSTALL_DIR/lib/${libbase}.a" >/dev/null 2>&1 \
++        || compgen -G "$AWSLC_INSTALL_DIR/bin/${libbase}.dll*" >/dev/null 2>&1
++}
++
++has_library libcrypto || die "Missing AWS-LC libcrypto in $AWSLC_INSTALL_DIR"
++has_library libssl || die "Missing AWS-LC libssl in $AWSLC_INSTALL_DIR"
++
++export LD_LIBRARY_PATH="$AWSLC_INSTALL_DIR/lib:${LD_LIBRARY_PATH:-}"
++export DYLD_LIBRARY_PATH="$AWSLC_INSTALL_DIR/lib:${DYLD_LIBRARY_PATH:-}"
++
++if [ "$SKIP_CONFIGURE" -eq 0 ]; then
++    log "Configuring OTP with AWS-LC"
++    run "$ERL_TOP/otp_build" autoconf
++    run "$ERL_TOP/configure" --with-ssl="$AWSLC_INSTALL_DIR" --with-ssl-rpath=yes
++fi
++
++if [ "$SKIP_BUILD" -eq 0 ]; then
++    log "Building OTP"
++    run make -C "$ERL_TOP" -j"$JOBS"
++fi
++
++OPENSSL_LIB="$("$ERL_TOP/bin/erl" -noshell -eval '
++application:ensure_all_started(crypto),
++case lists:keyfind(<<"OpenSSL">>, 1, crypto:info_lib()) of
++    {_, _, Vsn} ->
++        io:format("~ts~n", [Vsn]),
++        halt(0);
++    false ->
++        halt(1)
++end.')"
++log "crypto backend: $OPENSSL_LIB"
++case "$OPENSSL_LIB" in
++    *AWS-LC*)
++        ;;
++    *)
++        die "crypto is not using AWS-LC (got: $OPENSSL_LIB)"
++        ;;
++esac
++
++if [ "$SKIP_TESTS" -eq 0 ]; then
++    log "Running ssl tests"
++    TEST_ARGS="$SSL_TEST_ARGS"
++    if [ -n "$TIMETRAP_MULTIPLIER" ] && [ "$TIMETRAP_MULTIPLIER" != "0" ]; then
++        case " $TEST_ARGS " in
++            *" -multiply_timetraps "*) ;;
++            *)
++                TEST_ARGS="-multiply_timetraps $TIMETRAP_MULTIPLIER $TEST_ARGS"
++                ;;
++        esac
++    fi
++
++    if [ -n "$TEST_ARGS" ]; then
++        run env TEST_NEEDS_RELEASE=true make -C "$ERL_TOP/lib/ssl" test "ARGS=$TEST_ARGS"
++    else
++        run env TEST_NEEDS_RELEASE=true make -C "$ERL_TOP/lib/ssl" test
++    fi
++fi
++
++log "Done"
