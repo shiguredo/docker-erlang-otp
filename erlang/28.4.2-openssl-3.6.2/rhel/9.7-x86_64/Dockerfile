@@ -1,7 +1,7 @@
 FROM redhat/ubi9:9.7
 
 ENV OTP_VERSION=28.4.2
-ENV OPENSSL_VERSION=3.6.1
+ENV OPENSSL_VERSION=3.6.2
 
 RUN dnf -y update \
   && dnf clean all \
