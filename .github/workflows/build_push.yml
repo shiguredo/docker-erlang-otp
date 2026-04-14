@@ -68,7 +68,7 @@ jobs:
           fi
       - name: Setup Buildx
         if: steps.check.outputs.exists == 'false'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Checkout
         if: steps.check.outputs.exists == 'false'
         uses: actions/checkout@v4
@@ -125,7 +125,7 @@ jobs:
           fi
       - name: Setup Buildx
         if: steps.check.outputs.exists == 'false'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Checkout
         if: steps.check.outputs.exists == 'false'
         uses: actions/checkout@v4
