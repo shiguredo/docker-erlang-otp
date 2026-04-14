@@ -71,7 +71,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
       - name: Checkout
         if: steps.check.outputs.exists == 'false'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Erlang/OTP Dockerfile Build ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
         if: steps.check.outputs.exists == 'false'
         run: make ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
@@ -128,7 +128,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
       - name: Checkout
         if: steps.check.outputs.exists == 'false'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Erlang/OTP Dockerfile Build ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
         if: steps.check.outputs.exists == 'false'
         run: make ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
