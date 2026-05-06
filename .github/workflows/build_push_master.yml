@@ -1,0 +1,104 @@
+name: Build & Push Erlang/OTP master Docker Images
+
+on:
+  workflow_dispatch:
+  schedule:
+    # JST 10:00 = UTC 01:00
+    - cron: "0 1 * * *"
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build_push_openssl_master:
+    name: OpenSSL master Build
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          # Ubuntu 26.04 のイメージが出ていないので
+          - runs-on: ubuntu-24.04
+            os: ubuntu-26.04
+            arch: x86_64
+          # Ubuntu 26.04 のイメージが出ていないので
+          - runs-on: ubuntu-24.04-arm
+            os: ubuntu-26.04
+            arch: arm64v8
+          - runs-on: ubuntu-24.04
+            os: ubuntu-24.04
+            arch: x86_64
+          - runs-on: ubuntu-24.04-arm
+            os: ubuntu-24.04
+            arch: arm64v8
+          - runs-on: ubuntu-22.04
+            os: ubuntu-22.04
+            arch: x86_64
+          - runs-on: ubuntu-22.04-arm
+            os: ubuntu-22.04
+            arch: arm64v8
+          - runs-on: ubuntu-24.04
+            os: rhel-10.1
+            arch: x86_64
+          - runs-on: ubuntu-24.04
+            os: rhel-9.7
+            arch: x86_64
+          - runs-on: ubuntu-24.04
+            os: rhel-8.10
+            arch: x86_64
+    runs-on: ${{ matrix.platform.runs-on }}
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Erlang/OTP Dockerfile Build ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+        run: make ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+        working-directory: ./erlang/master-openssl-master
+
+  build_push_awslc_main:
+    name: AWS-LC main Build
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          # Ubuntu 26.04 のイメージが出ていないので
+          - runs-on: ubuntu-24.04
+            os: ubuntu-26.04
+            arch: x86_64
+          # Ubuntu 26.04 のイメージが出ていないので
+          - runs-on: ubuntu-24.04-arm
+            os: ubuntu-26.04
+            arch: arm64v8
+          - runs-on: ubuntu-24.04
+            os: ubuntu-24.04
+            arch: x86_64
+          - runs-on: ubuntu-24.04-arm
+            os: ubuntu-24.04
+            arch: arm64v8
+          - runs-on: ubuntu-22.04
+            os: ubuntu-22.04
+            arch: x86_64
+          - runs-on: ubuntu-22.04-arm
+            os: ubuntu-22.04
+            arch: arm64v8
+    runs-on: ${{ matrix.platform.runs-on }}
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Erlang/OTP Dockerfile Build ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+        run: make ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+        working-directory: ./erlang/master-aws-lc-main
