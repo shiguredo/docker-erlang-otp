@@ -3,8 +3,8 @@ name: Build & Push Erlang/OTP master Docker Images
 on:
   workflow_dispatch:
   schedule:
-    # JST 10:00 = UTC 01:00
-    - cron: "0 1 * * *"
+    # 毎週月曜 JST 10:00 = UTC 01:00
+    - cron: "0 1 * * 1"
 
 env:
   REGISTRY: ghcr.io
