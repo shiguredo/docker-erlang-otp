@@ -12,9 +12,11 @@ RUN apt-get update \
          libncurses-dev \
          cmake \
          ninja-build \
-         golang \
+         golang-1.22 \
   && apt-get clean \
   && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
+
+ENV PATH=/usr/lib/go-1.22/bin:$PATH
 
 # Build AWS-LC
 RUN git clone --depth 1 -b ${AWSLC_VERSION} https://github.com/aws/aws-lc /usr/local/src/aws-lc \
