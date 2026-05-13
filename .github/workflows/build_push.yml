@@ -14,6 +14,7 @@ jobs:
   build_push_openssl:
     name: OpenSSL Build
     strategy:
+      fail-fast: false
       matrix:
         platform:
           # Ubuntu 26.04 のイメージが出ていないので
@@ -80,6 +81,7 @@ jobs:
   build_push_awslc:
     name: AWS-LC Build
     strategy:
+      fail-fast: false
       matrix:
         platform:
           # Ubuntu 26.04 のイメージが出ていないので
