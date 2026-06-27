@@ -115,7 +115,7 @@ jobs:
             arch: x86_64
     runs-on: ${{ matrix.platform.runs-on }}
     env:
-      AWSLC_VERSION: "v5.0.0"
+      AWSLC_VERSION: "v5.1.0"
     steps:
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v4
