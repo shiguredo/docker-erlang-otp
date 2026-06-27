@@ -1,6 +1,6 @@
 FROM arm64v8/ubuntu:24.04
 
-ENV AWSLC_VERSION=v5.0.0
+ENV AWSLC_VERSION=v5.1.0
 ENV OTP_VERSION=29.0.2
 
 RUN apt-get update \
