@@ -1,5 +1,5 @@
 .PHONY: all rhel-8.10-x86_64 rhel-9.8-x86_64 rhel-10.2-x86_64 ubuntu-22.04-x86_64 ubuntu-24.04-x86_64 ubuntu-26.04-x86_64
-ERL_VERSION=29.0.2-aws-lc-v5.1.0
+ERL_VERSION=29.0.2-aws-lc-v5.2.0
 
 all: x86_64 arm64v8
 

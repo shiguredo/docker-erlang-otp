@@ -1,6 +1,6 @@
 FROM redhat/ubi10:10.2
 
-ENV AWSLC_VERSION=v5.1.0
+ENV AWSLC_VERSION=v5.2.0
 ENV OTP_VERSION=29.0.2
 
 RUN dnf -y update \
