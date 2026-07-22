@@ -2,17 +2,27 @@ name: Build & Push Erlang/OTP Docker Images
 
 on:
   workflow_dispatch:
+    inputs:
+      build_openssl:
+        description: Build OpenSSL images
+        type: boolean
+        default: true
+      build_awslc:
+        description: Build AWS-LC images
+        type: boolean
+        default: true
   push:
     tags:
       - "*"
 
 env:
   REGISTRY: ghcr.io
-  OTP_VERSION: "29.0.2"
+  OTP_VERSION: "29.0.3"
 
 jobs:
   build_push_openssl:
     name: OpenSSL Build
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_openssl }}
     strategy:
       fail-fast: false
       matrix:
@@ -80,6 +90,7 @@ jobs:
 
   build_push_awslc:
     name: AWS-LC Build
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_awslc }}
     strategy:
       fail-fast: false
       matrix:
