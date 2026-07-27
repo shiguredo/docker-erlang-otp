@@ -17,7 +17,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  OTP_VERSION: "29.0.3"
+  OTP_VERSION: "29.0.4"
 
 jobs:
   build_push_openssl:
