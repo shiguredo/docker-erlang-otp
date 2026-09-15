@@ -17,7 +17,7 @@
 
 ## AWS-LC パッチ
 
-- Ubuntu は [AWS-LC](https://github.com/aws/aws-lc) を利用した Erlang/OTP パッケージを提供しています
+- [AWS-LC](https://github.com/aws/aws-lc) を利用した Erlang/OTP パッケージを提供しています
 
 ## 管理ポリシー
 
