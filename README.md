@@ -1,7 +1,5 @@
 # Erlang/OTP Dockerfile 置き場
 
-- Pull-Request は受け付けていません
-
 ## 対応プラットフォーム
 
 - RHEL x86_64
