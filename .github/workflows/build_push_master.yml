@@ -30,10 +30,10 @@ jobs:
           - runs-on: ubuntu-24.04-arm
             os: ubuntu-24.04
             arch: arm64v8
-          - runs-on: ubuntu-22.04
+          - runs-on: ubuntu-24.04
             os: ubuntu-22.04
             arch: x86_64
-          - runs-on: ubuntu-22.04-arm
+          - runs-on: ubuntu-24.04-arm
             os: ubuntu-22.04
             arch: arm64v8
           - runs-on: ubuntu-24.04
@@ -81,10 +81,10 @@ jobs:
           - runs-on: ubuntu-24.04-arm
             os: ubuntu-24.04
             arch: arm64v8
-          - runs-on: ubuntu-22.04
+          - runs-on: ubuntu-24.04
             os: ubuntu-22.04
             arch: x86_64
-          - runs-on: ubuntu-22.04-arm
+          - runs-on: ubuntu-24.04-arm
             os: ubuntu-22.04
             arch: arm64v8
     runs-on: ${{ matrix.platform.runs-on }}
