@@ -1,9 +1,48 @@
+diff --git a/lib/crypto/c_src/aead.c b/lib/crypto/c_src/aead.c
+index 456e819..902be56 100644
+--- a/lib/crypto/c_src/aead.c
++++ b/lib/crypto/c_src/aead.c
+@@ -36,6 +36,7 @@ struct aead_cipher_ctx {
+ 
+     int encflg;
+     unsigned int tag_len;
++    int key_set;
+     ErlNifEnv *env;
+     ErlNifMutex * aead_m;  /* Should protect 'ctx', which needs to be thread-safe */
+ };
+@@ -79,6 +80,7 @@ ERL_NIF_TERM aead_cipher_init_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM a
+         return EXCP_ERROR(env, "Can't allocate resource");
+ 
+     ctx_res->ctx = NULL;
++    ctx_res->key_set = 0;
+     ctx_res->env = enif_alloc_env();
+     encflg_arg = argv[3];
+ 
+@@ -291,9 +293,16 @@ ERL_NIF_TERM aead_cipher_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
+     } else
+ #endif
+         { /* GCM_MODE or CHACHA20_POLY1305 */
+-            /* Set key and iv */
+-            if (EVP_CipherInit_ex(ctx, NULL, NULL, key.data, iv.data, -1) != 1)
++            /* Set key and iv. For a reused GCM state the key is already
++               set, so pass NULL to keep the key schedule (and the GHASH
++               key material). */
++            const unsigned char *key_data = key.data;
++            if (argc == 4 && ctx_res->key_set && (cipherp->flags & GCM_MODE))
++                key_data = NULL;
++            if (EVP_CipherInit_ex(ctx, NULL, NULL, key_data, iv.data, -1) != 1)
+                 {ret = EXCP_ERROR(env, "Can't set key and iv"); goto done;}
++            if (argc == 4 && (cipherp->flags & GCM_MODE))
++                ctx_res->key_set = 1;
+         }
+ 
+     /* Set the AAD */
 diff --git a/lib/crypto/c_src/cipher.c b/lib/crypto/c_src/cipher.c
-index b57563b3a7..cf52dc0f5a 100644
+index 544fe71..e9af8bd 100644
 --- a/lib/crypto/c_src/cipher.c
 +++ b/lib/crypto/c_src/cipher.c
 @@ -43,7 +43,11 @@ static struct cipher_type_t cipher_types[] =
-
+ 
  #ifdef HAVE_DES
      {{"des_cbc"}, "des-cbc", {&EVP_des_cbc},  0, NO_FIPS_CIPHER},
 +# ifdef HAVE_DES_CFB8
@@ -15,62 +54,73 @@ index b57563b3a7..cf52dc0f5a 100644
  #else
      {{"des_cbc"}, "des-cbc", {NULL}, 0, 0},
 diff --git a/lib/crypto/c_src/crypto.c b/lib/crypto/c_src/crypto.c
-index 7cb4068063..c92602f43e 100644
+index 616f42b..e722def 100644
 --- a/lib/crypto/c_src/crypto.c
 +++ b/lib/crypto/c_src/crypto.c
-@@ -384,11 +384,16 @@ static int upgrade(ErlNifEnv* env, void** priv_data, void** old_priv_data,
+@@ -58,7 +58,7 @@
+ /* NIF interface declarations */
+ static int load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info);
+ static int upgrade(ErlNifEnv* env, void** priv_data, void** old_priv_data, ERL_NIF_TERM load_info);
+-#if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,1,0) && !defined(HAS_LIBRESSL)
++#ifdef HAVE_OPENSSL_THREAD_STOP
+ static void unload_thread(void* priv_data);
+ #endif
+ static void unload(ErlNifEnv* env, void* priv_data);
+@@ -252,7 +252,7 @@ static int initialize(ErlNifEnv* env, ERL_NIF_TERM load_info)
+         ret = __LINE__; goto done;
+     }
+ 
+-#if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,1,0) && !defined(HAS_LIBRESSL)
++#ifdef HAVE_OPENSSL_THREAD_STOP
+     enif_set_option(env, ERL_NIF_OPT_ON_UNLOAD_THREAD, unload_thread);
+ #endif
+ 
+@@ -388,7 +388,7 @@ static int upgrade(ErlNifEnv* env, void** priv_data, void** old_priv_data,
      return 0;
  }
-
-+/* AWS-LC does not provide OPENSSL_thread_stop; use AWSLC_thread_local_clear instead. */
- #if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,1,0) && !defined(HAS_LIBRESSL)
+ 
+-#if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,1,0) && !defined(HAS_LIBRESSL)
++#ifdef HAVE_OPENSSL_THREAD_STOP
  static void unload_thread(void* priv_data)
  {
      if (library_refc == 1) {
--        OPENSSL_thread_stop();
-+#ifdef HAS_AWSLC
-+        AWSLC_thread_local_clear();
-+#else
-+        OPENSSL_thread_stop();
-+#endif
-     }
- }
- #endif
-@@ -411,4 +416,3 @@ static void unload(ErlNifEnv* env, void* priv_data)
+@@ -415,4 +415,3 @@ static void unload(ErlNifEnv* env, void* priv_data)
           */
      }
  }
 -
 diff --git a/lib/crypto/c_src/ec.c b/lib/crypto/c_src/ec.c
-index 8cb9604497..da378d60f4 100644
+index 8cb9604..a6789bf 100644
 --- a/lib/crypto/c_src/ec.c
 +++ b/lib/crypto/c_src/ec.c
 @@ -668,8 +668,13 @@ static EC_KEY* ec_key_new(ErlNifEnv* env, ERL_NIF_TERM curve_arg, size_t *size)
          goto err;
-
+ 
      if (enif_inspect_binary(env, prime[2], &seed)) {
-+        /* AWS-LC: EC_GROUP_set_seed() is a no-op and returns 0; ignore the return value. */
++        /* AWS-LC: EC_GROUP_set_seed() is a deprecated no-op that always
++         * returns 0, so treating failure as fatal would reject all seeded
++         * curves. Seed is unused by cryptographic methods anyway. */
 +#ifndef HAS_AWSLC
          if (!EC_GROUP_set_seed(group, seed.data, seed.size))
              goto err;
-+#else
-+        (void)EC_GROUP_set_seed(group, seed.data, seed.size);
 +#endif
      }
-
+ 
      if (!term2point(env, curve[2], group, &point))
 diff --git a/lib/crypto/c_src/openssl_config.h b/lib/crypto/c_src/openssl_config.h
-index f525aeccc1..5e29b6bf52 100644
+index 64e4a3b..0217a5e 100644
 --- a/lib/crypto/c_src/openssl_config.h
 +++ b/lib/crypto/c_src/openssl_config.h
-@@ -58,6 +58,37 @@
+@@ -58,6 +58,34 @@
  # include <openssl/provider.h>
  #endif
-
-+/* AWS-LC compatibility shims.
-+ * AWS-LC uses generic AEAD control codes instead of CCM-specific ones.
-+ * AWS-LC does not provide EVP_CIPHER_type() or OPENSSL_ECC_MAX_FIELD_BITS.
-+ * AWS-LC removes BN_FLG_CONSTTIME; constant-time operations are default.
+ 
++/* AWS-LC compatibility shims (verified against AWS-LC 5.8.0).
++ * - CCM ctrl codes: only EVP_CTRL_CCM_SET_L exists; map the rest to AEAD.
++ * - EVP_CIPHER_type(): absent; alias to EVP_CIPHER_nid().
++ * - OPENSSL_ECC_MAX_FIELD_BITS: absent; use OpenSSL's value (661).
++ * - EVP_PKEY_CMAC: absent; NID_cmac exists and is used by the MAC table.
++ * BN_FLG_CONSTTIME is defined as 0 by AWS-LC itself (no-op), so no shim.
 + */
 +#ifdef HAS_AWSLC
 +# ifndef EVP_CTRL_CCM_SET_IVLEN
@@ -88,11 +138,6 @@ index f525aeccc1..5e29b6bf52 100644
 +# ifndef OPENSSL_ECC_MAX_FIELD_BITS
 +#  define OPENSSL_ECC_MAX_FIELD_BITS 661
 +# endif
-+/* AWS-LC removes BN_FLG_CONSTTIME; constant-time operations are default. */
-+# ifndef BN_FLG_CONSTTIME
-+#  define BN_FLG_CONSTTIME 0
-+# endif
-+/* AWS-LC does not define EVP_PKEY_CMAC but does define NID_cmac. */
 +# ifndef EVP_PKEY_CMAC
 +#  define EVP_PKEY_CMAC NID_cmac
 +# endif
@@ -101,52 +146,55 @@ index f525aeccc1..5e29b6bf52 100644
  /* LibreSSL was cloned from OpenSSL 1.0.1g and claims to be API and BPI compatible
   * with 1.0.1.
   *
-@@ -119,7 +150,10 @@
-
+@@ -108,6 +136,11 @@
+ #ifndef HAS_LIBRESSL
+ # if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,1,0)
+ #  define HAS_BN_bn2binpad
++/* AWS-LC does not provide OPENSSL_thread_stop (thread-local cleanup is
++ * handled inside the library). */
++#  ifndef HAS_AWSLC
++#   define HAVE_OPENSSL_THREAD_STOP
++#  endif
+ # endif
+ #endif
+ 
+@@ -119,7 +152,11 @@
+ 
  # if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,1,1)
  #   define HAVE_PKEY_new_raw_private_key
-+/* AWS-LC does not provide EVP_PKEY_new_CMAC_key. */
++/* AWS-LC does not provide EVP_PKEY_new_CMAC_key; CMAC uses CMAC_* via
++ * cmac.c when this is undefined. */
 +#  ifndef HAS_AWSLC
  #   define HAVE_EVP_PKEY_new_CMAC_key
 +#  endif
  #   define HAVE_DigestSign_as_single_op
  # endif
  #endif
-@@ -158,7 +192,8 @@
+@@ -158,7 +195,10 @@
  #endif
-
-
+ 
+ 
 -#if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,0,0)
-+/* AWS-LC does not provide modes.h (CRYPTO_gcm128_* APIs). */
++/* AWS-LC's public modes.h only exposes CRYPTO_cts128_*. CRYPTO_gcm128_*
++ * is internal-only, and OTP only needs it for HAVE_GCM_EVP_DECRYPT_BUG
++ * (OpenSSL < 1.0.1d), which does not apply to AWS-LC. */
 +#if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,0,0) && !defined(HAS_AWSLC)
  #include <openssl/modes.h>
  #endif
-
-@@ -247,7 +282,8 @@
+ 
+@@ -255,7 +295,10 @@
  #ifndef OPENSSL_NO_DES
  # define HAVE_DES
-
+ 
 -# if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION(0,9,7,'e')
-+/* AWS-LC does not provide EVP_des_cfb8 / EVP_des_ede3_cfb8. */
++/* AWS-LC provides EVP_des_cbc/ecb/ede* but not EVP_des_cfb8 /
++ * EVP_des_ede3_cfb8. */
 +# if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION(0,9,7,'e') && !defined(HAS_AWSLC)
++#  define HAVE_DES_CFB8
  #  define HAVE_DES_ede3_cfb
  # endif
-
-@@ -256,6 +292,13 @@
- # endif
- #endif
-
-+/* AWS-LC does not provide EVP_des_cfb8. */
-+#if defined(HAS_AWSLC)
-+# undef HAVE_DES_CFB8
-+#else
-+# define HAVE_DES_CFB8
-+#endif
-+
- #ifndef OPENSSL_NO_DH
- # define HAVE_DH
- #endif
-@@ -298,6 +341,7 @@
+ 
+@@ -306,6 +349,7 @@
  // (test for >= 1.1.1pre8)
  #if OPENSSL_VERSION_NUMBER >= (PACKED_OPENSSL_VERSION_PLAIN(1,1,1) -7) \
      && !defined(HAS_LIBRESSL) \
@@ -154,11 +202,12 @@ index f525aeccc1..5e29b6bf52 100644
      && defined(HAVE_EC)
  # ifdef HAVE_DH
  #   define HAVE_X25519
-@@ -309,6 +353,14 @@
+@@ -317,6 +361,15 @@
  # endif
  #endif
-
-+/* AWS-LC only provides Ed25519/X25519 (no Ed448/X448). */
+ 
++/* AWS-LC declares EVP_PKEY_ED448/X448 for ABI compat, but key creation
++ * fails. Enable only Ed25519/X25519. */
 +#if defined(HAS_AWSLC) && defined(HAVE_EC)
 +# ifdef HAVE_DH
 +#   define HAVE_X25519
@@ -169,11 +218,12 @@ index f525aeccc1..5e29b6bf52 100644
  #if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION_PLAIN(1,0,1)
  # define HAVE_EVP_AES_CTR
  # define HAVE_AEAD
-@@ -335,18 +387,22 @@
+@@ -343,18 +396,23 @@
  # endif
  #endif
-
-+/* AWS-LC does not provide EVP_chacha20 (only EVP_chacha20_poly1305). */
+ 
++/* AWS-LC provides EVP_chacha20_poly1305 and CRYPTO_chacha_20, but not
++ * the EVP_chacha20 stream-cipher wrapper that OTP registers. */
  #if OPENSSL_VERSION_NUMBER >= PACKED_OPENSSL_VERSION(1,1,0,'d')
  # ifndef HAS_LIBRESSL
  #  ifndef OPENSSL_NO_CHACHA
@@ -183,9 +233,9 @@ index f525aeccc1..5e29b6bf52 100644
  #  endif
  # endif
  #endif
-
+ 
  // OPENSSL_VERSION_NUMBER >= 1.1.1-pre8
-+/* AWS-LC does not provide EVP_PKEY_POLY1305. */
++/* AWS-LC provides CRYPTO_poly1305_* but not EVP_PKEY_POLY1305. */
  #if OPENSSL_VERSION_NUMBER >= (PACKED_OPENSSL_VERSION_PLAIN(1,1,1)-7)
  # ifndef HAS_LIBRESSL
 -#  if !defined(OPENSSL_NO_POLY1305)
@@ -194,13 +244,13 @@ index f525aeccc1..5e29b6bf52 100644
  #  endif
  # endif
 diff --git a/lib/crypto/c_src/openssl_version.h b/lib/crypto/c_src/openssl_version.h
-index 657e114eb4..4929b897ba 100644
+index 657e114..4929b89 100644
 --- a/lib/crypto/c_src/openssl_version.h
 +++ b/lib/crypto/c_src/openssl_version.h
 @@ -32,6 +32,11 @@
  # define HAS_LIBRESSL_VSN 0
  #endif
-
+ 
 +/* Defined by AWS-LC in <openssl/base.h>. */
 +#ifdef OPENSSL_IS_AWSLC
 +# define HAS_AWSLC
