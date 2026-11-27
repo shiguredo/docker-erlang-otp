@@ -17,7 +17,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  OTP_VERSION: "29.1.2"
+  OTP_VERSION: "29.1.3"
 
 jobs:
   build_push_openssl:
@@ -94,7 +94,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        awslc: ["v5.12.0", "v5.13.0"]
+        awslc: ["v5.15.0"]
         platform:
           # Ubuntu 26.04 のイメージが出ていないので
           - runs-on: ubuntu-24.04
